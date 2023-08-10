@@ -1227,12 +1227,23 @@ def get_rnnt_logprobs_smoothed(
         torch.mean(lm_probs / lmonly_normalizers, dim=(0, 1), keepdim=True)
         + torch.finfo(lm_probs.dtype).tiny
     )  # [1][1][C]
+
+    """
     amonly_normalizers = (
         torch.mv(am_probs.reshape(-1, C), unigram_lm.reshape(C))
         .reshape(B, T, 1)
         .log()
         + am_max
     )  # [B][T][1]
+    """
+
+    amonly_normalizers = (
+        am_probs.sum(dim=2, keepdim=True)
+        .reshape(B, T, 1)
+        .log()
+        + am_max
+    )
+    
     amonly_normalizers = amonly_normalizers.transpose(1, 2)  # [B][1][T]
     unigram_lm = unigram_lm.log()
     lmonly_normalizers = (
@@ -1274,9 +1285,14 @@ def get_rnnt_logprobs_smoothed(
     px = px_am + px_lm  # [B][S][T+1] if not modified, [B][S][T] if modified
     px[:, :, :T] -= normalizers[:, :S, :]  # px: [B][S][T+1] or [B][S][T]
 
+    """
     px_amonly = (
         px_am + px_lm_unigram
     )  # [B][S][T+1] if !modified; [B][S][T] if modified.
+    """
+
+    px_amonly = px_am
+    
     px_amonly[:, :, :T] -= amonly_normalizers
     px_lmonly = px_lm - lmonly_normalizers[:, :S, :]
 
@@ -1286,7 +1302,11 @@ def get_rnnt_logprobs_smoothed(
     py = py_am + py_lm - normalizers
 
     py_lm_unigram = unigram_lm[0][0][termination_symbol]  # scalar, normalized..
-    py_amonly = py_am + py_lm_unigram - amonly_normalizers  # [B][1][T]
+    
+    # py_amonly = py_am + py_lm_unigram - amonly_normalizers  # [B][1][T]
+
+    py_amonly = py_am - amonly_normalizers  # [B][1][T]    
+    
     py_lmonly = py_lm - lmonly_normalizers  # [B][S+1][1]
 
     combined_scale = 1.0 - lm_only_scale - am_only_scale
